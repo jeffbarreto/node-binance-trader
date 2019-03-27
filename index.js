@@ -21,6 +21,7 @@ const Configstore = require('configstore')
 const binance     = require('binance-api-node').default
 const inquirer    = require("inquirer")
 const setTitle    = require('node-bash-title')
+const nodemailer = require('nodemailer')
 
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').load();
@@ -56,6 +57,34 @@ let buying_method = ""
 let selling_method = ""
 let init_buy_filled = false
 
+
+var is_email_enable = false
+
+// subject
+// symbol + " SELL :: " + strat.name + " :: "
+//     + " pnl:%" + numeral(100.00*((parseFloat(close)/parseFloat(tracked_pairs[tracked_index].price))-1)).format("0.000") 
+//     + " tpnl:%" + numeral(_.sumBy(total_pnl[strat.name], 'pnl')).format("0.000") 
+//     + " ::  A:" + numeral(depth_asks[symbol]).format("0.00") 
+//     + " B:" + numeral(depth_bids[symbol]).format("0.00") 
+//     + " C:" + close 
+//     + " D:%" + numeral(depth_diff[symbol]).format("0.000")
+
+// text
+// "https://www.binance.com/tradeDetail.html?symbol=" + symbol.slice(0, -3) + "_BTC \n"
+//     + "  ------------------------------------------ \n"
+//     + tracked_data[symbol][strat.name].map(item => JSON.stringify(item)+"\n") + "\n"
+
+const gmail_address = process.env.G_EMAIL
+const gmail_password = process.env.G_PSWD
+const gmailEmail = encodeURIComponent(gmail_address);
+const gmailPassword = encodeURIComponent(gmail_password);
+const mailTransport = nodemailer.createTransport(`smtps://${gmailEmail}:${gmailPassword}@smtp.gmail.com`);
+const mailOptions = {
+  from: '"NBT Bot" ' + gmail_address,
+  to: gmail_address,
+  subject: null, 
+  text: null
+}
 //////////////////////////////////////////////////////////////////////////////////
 
 // Binance API initialization //
@@ -75,7 +104,7 @@ clear()
 console.log(chalk.yellow(figlet.textSync('_B_T_', { horizontalLayout: 'fitted' })))
 console.log(' ')
 console.log(" 🐬 ".padEnd(10) + '                   ' + " 🐬 ".padStart(11))
-console.log(" 🐬 ".padEnd(10) + chalk.bold.underline.cyan('Node Binance Trader') + " 🐬 ".padStart(11))
+// console.log(" 🐬 ".padEnd(10) + chalk.bold.underline.cyan('Node Binance Trader') + " 🐬 ".padStart(11))
 console.log(" 🐬 ".padEnd(10) + '                   ' + " 🐬 ".padStart(11))
 console.log(' ')
 console.log(chalk.yellow('  ⚠️  USE THIS APP AT YOUR OWN RISK ⚠️'))
@@ -150,6 +179,56 @@ ask_pair_budget = () => {
         ask_pair_budget()
       }
     })
+  })
+}
+
+
+see_balance = () => {
+    // FIND OUT IF PAIR EXISTS AND THE PAIR QUOTE INFO:
+    client.accountInfo().then(results => {
+      console.log(results)
+      console.log(' ')
+      console.log(
+        chalk.magenta.bold('Pair'.padEnd(10) + ' '.padEnd(10) + 'Free'.padEnd(10) + ' '.padEnd(10) + 'Loked'.padEnd(10)) + ' '.padEnd(10)
+        + chalk.magenta.bold(moment().format('h:mm:ss'))
+      )
+      console.log(' ')
+
+      results.balances.forEach(function (coin) {
+        if((parseFloat(coin.free) > 0) || (parseFloat(coin.locked) > 0)) {
+          console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
+          console.log(' ')
+          // console.log(" 🐬 ".padEnd(10) + '                   ' + " 🐬 ".padStart(11))
+          // // console.log(" 🐬 ".padEnd(10) + chalk.bold.underline.cyan('Node Binance Trader') + " 🐬 ".padStart(11))
+          // console.log(" 🐬 ".padEnd(10) + '                   ' + " 🐬 ".padStart(11))
+          // console.log(' ')
+          // console.log(chalk.yellow('  ⚠️  USE THIS APP AT YOUR OWN RISK ⚠️'))
+          // console.log(' ')
+
+        }
+      })
+      // CHECK IF PAIR IS UNKNOWN:
+      // if (_.filter(results.symbols, {symbol: pair}).length > 0) {
+      //   setTitle('🐬 ' + pair + ' 🐬 ')
+      //   tickSize = _.filter(results.symbols, {symbol: pair})[0].filters[0].tickSize.indexOf("1") - 1
+      //   stepSize = _.filter(results.symbols, {symbol: pair})[0].filters[2].stepSize
+      //   // GET ORDER BOOK
+      //   client.book({ symbol: pair }).then(results => {
+      //     // SO WE CAN TRY TO BUY AT THE 1ST BID PRICE + %0.02:
+      //     bid_price = parseFloat(results.bids[0].price)
+      //     ask_price = parseFloat(results.asks[0].price)
+      //     console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
+      //       + chalk.yellow(pair.padStart(10))
+      //       + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
+      //     fixed_buy_price_input[0].default = results.bids[0].price
+      //     ask_buy_sell_options()
+      //   })
+      // }
+      // else {
+      //   console.log(chalk.magenta("SORRY THE PAIR ") + chalk.green(pair) + chalk.magenta(" IS UNKNOWN BY BINANCE. Please try another one."))
+      //   ask_pair_budget()
+      // }
+    // })
   })
 }
 
@@ -580,25 +659,32 @@ checkBuyOrderStatus = () => {
   .then( order => {
     if (order.status === "FILLED") {
       init_buy_filled = true
-      console.log(order)
-      buy_amount = parseFloat(order.executedQty)
-      console.log(chalk.white(" INITAL BUY ORDER FULLY EXECUTED "))
-      client.myTrades({ symbol: pair, limit: 1, recvWindow: 1000000 }).then( mytrade => {
-        buy_price = parseFloat(mytrade[0].price)
-        console.log(chalk.gray(" FINAL BUY PRICE @ ") + chalk.cyan(buy_price))
-        if (selling_method==="Trailing") {
-          stop_price = (buy_price - (buy_price * trailing_pourcent / 100.00)).toFixed(tickSize)
-          loss_price = (stop_price - (stop_price * 0.001)).toFixed(tickSize)
-          set_stop_loss_order()
-          switch_price = (buy_price + (buy_price * trailing_pourcent / 100.00)).toFixed(tickSize)
-        }
-        else {
-          stop_price = (buy_price - (buy_price * loss_pourcent / 100.00)).toFixed(tickSize)
-          loss_price = (stop_price - (stop_price * 0.001)).toFixed(tickSize)
-          set_stop_loss_order()
-          switch_price = (buy_price + (buy_price * profit_pourcent / 200.00)).toFixed(tickSize)
-          sell_price = (buy_price + (buy_price * profit_pourcent / 100.00)).toFixed(tickSize)
-        }
+      client.accountInfo({recvWindow: 1000000}).then(info => {
+        info.balances.forEach(function (value, index) {
+          var pairSearched = value.asset + base_currency
+          if (pairSearched == pair) {
+            buy_amount = parseFloat(value.free)
+          }
+        })
+        // buy_amount = parseFloat(order.executedQty)
+        console.log(chalk.white(" INITAL BUY ORDER FULLY EXECUTED "))
+        client.myTrades({ symbol: pair, limit: 1, recvWindow: 1000000 }).then( mytrade => {
+          buy_price = parseFloat(mytrade[0].price)
+          console.log(chalk.gray(" FINAL BUY PRICE @ ") + chalk.cyan(buy_price))
+          if (selling_method==="Trailing") {
+            stop_price = (buy_price - (buy_price * trailing_pourcent / 100.00)).toFixed(tickSize)
+            loss_price = (stop_price - (stop_price * 0.001)).toFixed(tickSize)
+            set_stop_loss_order()
+            switch_price = (buy_price + (buy_price * trailing_pourcent / 100.00)).toFixed(tickSize)
+          }
+          else {
+            stop_price = (buy_price - (buy_price * loss_pourcent / 100.00)).toFixed(tickSize)
+            loss_price = (stop_price - (stop_price * 0.001)).toFixed(tickSize)
+            set_stop_loss_order()
+            switch_price = (buy_price + (buy_price * profit_pourcent / 200.00)).toFixed(tickSize)
+            sell_price = (buy_price + (buy_price * profit_pourcent / 100.00)).toFixed(tickSize)
+          }
+        })
       })
     }
     else {
@@ -726,6 +812,13 @@ process.stdin.on('keypress', ( key ) => {
 var options_menu = [
   new inquirer.Separator(),
   {
+    name: 'See your balances',
+    value: {
+      name: 'see_balance',
+      method: see_balance
+    }
+  },
+  {
     name: 'See your orders',
     value: {
       name: 'see_order',
@@ -751,6 +844,17 @@ var options_menu = [
     }
   },
   {
+    name:'Toggle status email',
+    value: {
+      name: 'toggle_email',
+      method: () => {
+        is_email_enable = !is_email_enable
+        clear()
+        ask_menu()
+      }
+    }
+  },
+  {
     name:'See info about a specific coin',
     value: {
       name: 'see_info_coin',
@@ -772,6 +876,8 @@ var menu_request = [
 ]
 
 ask_menu = () => {
+  console.log(chalk.cyan('Is email enabled ? ') +  (is_email_enable ?  chalk.green(' True ') : chalk.red(' False ')))
+  console.log(' ')
   inquirer.prompt(menu_request).then(answers => {
     for(var i = 0; i < options_menu.length; i++) {
       if (options_menu[i].value  && (options_menu[i].value.name == answers.menu_option.name)) {
