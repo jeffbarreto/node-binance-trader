@@ -58,7 +58,7 @@ let buying_method = ""
 let selling_method = ""
 let init_buy_filled = false
 
-
+var my_coins = []
 var is_email_enable = false
 
 // subject
@@ -92,6 +92,8 @@ const mailOptions = {
 const client = binance({apiKey: APIKEY, apiSecret: APISECRET, useServerTime: true})
 
 const conf = new Configstore('nbt')
+let pair_currency = ''
+let coin_info = ''
 let base_currency = conf.get('nbt.base_currency')?conf.get('nbt.base_currency'):"USDT"
 let budget = conf.get('nbt.budget')?parseFloat(conf.get('nbt.budget')):1.00
 let fixed_buy_price = conf.get('nbt.fixed_buy_price')?parseFloat(conf.get('nbt.fixed_buy_price')):0.00
@@ -161,68 +163,105 @@ ask_pair_budget = () => {
       // CHECK IF PAIR IS UNKNOWN:
       if (_.filter(results.symbols, {symbol: pair}).length > 0) {
         setTitle('🐬 ' + pair + ' 🐬 ')
-        tickSize = _.filter(results.symbols, {symbol: pair})[0].filters[0].tickSize.indexOf("1") - 1
-        stepSize = _.filter(results.symbols, {symbol: pair})[0].filters[2].stepSize
-        // GET ORDER BOOK
         client.book({ symbol: pair }).then(results => {
-          // SO WE CAN TRY TO BUY AT THE 1ST BID PRICE + %0.02:
-          bid_price = parseFloat(results.bids[0].price)
-          ask_price = parseFloat(results.asks[0].price)
           console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
             + chalk.yellow(pair.padStart(10))
-            + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
-          fixed_buy_price_input[0].default = results.bids[0].price
-          ask_buy_sell_options()
+            + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price )
+          )
+          ask_menu()
         })
       }
       else {
         console.log(chalk.magenta("SORRY THE PAIR ") + chalk.green(pair) + chalk.magenta(" IS UNKNOWN BY BINANCE. Please try another one."))
-        ask_pair_budget()
+        ask_menu()
       }
     })
   })
 }
 
+see_order = () => {
+  client.allOrders().then(orders => {
+    console.log(orders)
+  })
+}
+
+var info_request = [
+  {
+    type: 'input',
+    name: 'pair_currency',
+    message: chalk.cyan('What urrency would you use for make pair? (USDT, BTC, BNB or ETH)'),
+    default: base_currency,
+    validate: function(value) {
+      var valid = ((value.toUpperCase()==='BTC')||(value.toUpperCase()==='USDT')||(value.toUpperCase()==='ETH')||(value.toUpperCase()==='BNB'))
+      return valid || 'Currency not valid, please chose between USDT, BTC, BNB, ETH'
+    }
+  },
+  {
+    type: 'input',
+    name: 'coin_info',
+    message: chalk.cyan('What currency would you like to get information ?'),
+    default: currency_to_buy
+  }
+]
+
+see_info_coin = () => {
+  inquirer.prompt(info_request).then(answers => {
+    pair = (answers.coin_info + answers.pair_currency).toUpperCase()
+    conf.set('nbt.base_currency', (answers.pair_currency).toUpperCase())
+    conf.set('nbt.currency_to_buy', (answers.coin_info).toUpperCase())
+    base_currency = (answers.pair_currency).toUpperCase()
+    currency_to_buy = (answers.coin_info).toUpperCase()
+    info_request[0].default  = pair_currency
+    info_request[1].default  = coin_info
+    buy_info_request[0].default  = pair_currency
+    buy_info_request[2].default  = coin_info
+    // FIND OUT IF PAIR EXISTS AND THE PAIR QUOTE INFO:
+    client.book({ symbol: pair }).then(results => {
+      // SO WE CAN TRY TO BUY AT THE 1ST BID PRICE + %0.02:
+      bid_price = parseFloat(results.bids[0].price)
+      ask_price = parseFloat(results.asks[0].price)
+      console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
+        + chalk.yellow(pair.padStart(10))
+        + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
+      fixed_buy_price_input[0].default = restapipubults.bids[0].price
+      ask_buy_sell_options()
+    })
+  })
+}
 
 see_balance = () => {
-    // FIND OUT IF PAIR EXISTS AND THE PAIR QUOTE INFO:
-    client.accountInfo().then(results => {
-      // console.log(results)
+  console.log(' ')
+  console.log(
+    chalk.magenta.bold('Pair'.padEnd(10) + ' '.padEnd(10) + 'Free'.padEnd(10) + ' '.padEnd(10) + 'Loked'.padEnd(10)) + ' '.padEnd(10)
+    + chalk.magenta.bold(moment().format('h:mm:ss'))
+  )
+
+  var all_prices_crypto = []
+  var balance_in_btc = 0
+  var valueBTC = 0
+  client.prices().then((ticker) => {
+    var keyCrypto = Object.keys(ticker)
+    var valueCrypto = Object.values(ticker)
+    valueBTC = parseFloat(ticker.BTCUSDT)
+    my_coins.forEach(function (coin) {
+      // console.log(keyCrypto.indexOf(coin.asset + 'BTC'))
+      var index = keyCrypto.indexOf(coin.asset == 'BTC' ? 'BTC' : coin.asset + 'BTC')
+      if (index > 0 ) {
+        var value = new BigNumber(valueCrypto[index])
+        var coinValue = (new BigNumber(coin.locked).plus(parseFloat(coin.free)))
+        balance_in_btc += parseFloat(value.times(coinValue).toFormat(8))
+      }
+
+      console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
       console.log(' ')
-      console.log(
-        chalk.magenta.bold('Pair'.padEnd(10) + ' '.padEnd(10) + 'Free'.padEnd(10) + ' '.padEnd(10) + 'Loked'.padEnd(10)) + ' '.padEnd(10)
-        + chalk.magenta.bold(moment().format('h:mm:ss'))
-      )
-
-      var all_prices_crypto = []
-      var balance_in_btc = 0
-      var valueBTC = 0
-      client.prices().then((ticker) => {
-        var keyCrypto = Object.keys(ticker)
-        var valueCrypto = Object.values(ticker)
-        valueBTC = parseFloat(ticker.BTCUSDT)
-        results.balances.forEach(function (coin) {
-          if((parseFloat(coin.free) > 0) || (parseFloat(coin.locked) > 0)) {
-            // console.log(keyCrypto.indexOf(coin.asset + 'BTC'))
-            var index = keyCrypto.indexOf(coin.asset == 'BTC' ? 'BTC' : coin.asset + 'BTC')
-            if (index > 0 ) {
-              var value = new BigNumber(valueCrypto[index])
-              var coinValue = (new BigNumber(coin.locked).plus(parseFloat(coin.free)))
-              balance_in_btc += parseFloat(value.times(coinValue).toFormat(8))
-            }
-
-            console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
-            console.log(' ')
-          }
-        })
-      }).then(() => {
-        console.log(
-          chalk.magenta.bold('BTC ' + balance_in_btc.toString().padEnd(10) + ' | USDT $ ' + parseFloat(valueBTC * parseFloat(balance_in_btc)).toFixed(2)).padEnd(10) + ' '.padEnd(20) 
-          + chalk.magenta.bold(moment().format('h:mm:ss'))
-        )
-        ask_menu()
-      });
-  })
+    })
+  }).then(() => {
+    console.log(
+      chalk.magenta.bold('BTC ' + balance_in_btc.toString().padEnd(10) + ' | USDT $ ' + parseFloat(valueBTC * parseFloat(balance_in_btc)).toFixed(2)).padEnd(10) + ' '.padEnd(20) 
+      + chalk.magenta.bold(moment().format('h:mm:ss'))
+    )
+    ask_menu()
+  });
 }
 
 var buy_sell_options = [
@@ -816,9 +855,7 @@ var options_menu = [
     name: 'See your orders',
     value: {
       name: 'see_order',
-      method: () => {
-        console.log('not implement')
-      }
+      method: see_order
     }
   },
   {
@@ -852,9 +889,7 @@ var options_menu = [
     name:'See info about a specific coin',
     value: {
       name: 'see_info_coin',
-      method: () => {
-        console.log('not implement')
-      }
+      method: see_info_coin
     }
   }
 ]
@@ -869,14 +904,24 @@ var menu_request = [
 ]
 
 ask_menu = () => {
-  console.log(chalk.cyan('Is email enabled ? ') +  (is_email_enable ?  chalk.green(' True ') : chalk.red(' False ')))
-  console.log(' ')
-  inquirer.prompt(menu_request).then(answers => {
-    for(var i = 0; i < options_menu.length; i++) {
-      if (options_menu[i].value  && (options_menu[i].value.name == answers.menu_option.name)) {
-        options_menu[i].value.method()
+
+  my_coins = []
+  client.accountInfo().then(results => {
+    results.balances.forEach(function (coin) {
+      if((parseFloat(coin.free) > 0) || (parseFloat(coin.locked) > 0)) {
+        my_coins.push(coin)
       }
-    }
+    })
+  }).then(() => {
+    console.log(chalk.cyan('Is email enabled ? ') +  (is_email_enable ?  chalk.green(' True ') : chalk.red(' False ')))
+    console.log(' ')
+    inquirer.prompt(menu_request).then(answers => {
+      for(var i = 0; i < options_menu.length; i++) {
+        if (options_menu[i].value  && (options_menu[i].value.name == answers.menu_option.name)) {
+          options_menu[i].value.method()
+        }
+      }
+    })
   })
 }
 
