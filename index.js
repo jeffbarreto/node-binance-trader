@@ -21,7 +21,8 @@ const Configstore = require('configstore')
 const binance     = require('binance-api-node').default
 const inquirer    = require("inquirer")
 const setTitle    = require('node-bash-title')
-const nodemailer = require('nodemailer')
+const BigNumber   = require('bignumber.js');
+const nodemailer  = require('nodemailer')
 
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').load();
@@ -186,49 +187,41 @@ ask_pair_budget = () => {
 see_balance = () => {
     // FIND OUT IF PAIR EXISTS AND THE PAIR QUOTE INFO:
     client.accountInfo().then(results => {
-      console.log(results)
+      // console.log(results)
       console.log(' ')
       console.log(
         chalk.magenta.bold('Pair'.padEnd(10) + ' '.padEnd(10) + 'Free'.padEnd(10) + ' '.padEnd(10) + 'Loked'.padEnd(10)) + ' '.padEnd(10)
         + chalk.magenta.bold(moment().format('h:mm:ss'))
       )
-      console.log(' ')
 
-      results.balances.forEach(function (coin) {
-        if((parseFloat(coin.free) > 0) || (parseFloat(coin.locked) > 0)) {
-          console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
-          console.log(' ')
-          // console.log(" 🐬 ".padEnd(10) + '                   ' + " 🐬 ".padStart(11))
-          // // console.log(" 🐬 ".padEnd(10) + chalk.bold.underline.cyan('Node Binance Trader') + " 🐬 ".padStart(11))
-          // console.log(" 🐬 ".padEnd(10) + '                   ' + " 🐬 ".padStart(11))
-          // console.log(' ')
-          // console.log(chalk.yellow('  ⚠️  USE THIS APP AT YOUR OWN RISK ⚠️'))
-          // console.log(' ')
+      var all_prices_crypto = []
+      var balance_in_btc = 0
+      var valueBTC = 0
+      client.prices().then((ticker) => {
+        var keyCrypto = Object.keys(ticker)
+        var valueCrypto = Object.values(ticker)
+        valueBTC = parseFloat(ticker.BTCUSDT)
+        results.balances.forEach(function (coin) {
+          if((parseFloat(coin.free) > 0) || (parseFloat(coin.locked) > 0)) {
+            // console.log(keyCrypto.indexOf(coin.asset + 'BTC'))
+            var index = keyCrypto.indexOf(coin.asset == 'BTC' ? 'BTC' : coin.asset + 'BTC')
+            if (index > 0 ) {
+              var value = new BigNumber(valueCrypto[index])
+              var coinValue = (new BigNumber(coin.locked).plus(parseFloat(coin.free)))
+              balance_in_btc += parseFloat(value.times(coinValue).toFormat(8))
+            }
 
-        }
-      })
-      // CHECK IF PAIR IS UNKNOWN:
-      // if (_.filter(results.symbols, {symbol: pair}).length > 0) {
-      //   setTitle('🐬 ' + pair + ' 🐬 ')
-      //   tickSize = _.filter(results.symbols, {symbol: pair})[0].filters[0].tickSize.indexOf("1") - 1
-      //   stepSize = _.filter(results.symbols, {symbol: pair})[0].filters[2].stepSize
-      //   // GET ORDER BOOK
-      //   client.book({ symbol: pair }).then(results => {
-      //     // SO WE CAN TRY TO BUY AT THE 1ST BID PRICE + %0.02:
-      //     bid_price = parseFloat(results.bids[0].price)
-      //     ask_price = parseFloat(results.asks[0].price)
-      //     console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
-      //       + chalk.yellow(pair.padStart(10))
-      //       + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
-      //     fixed_buy_price_input[0].default = results.bids[0].price
-      //     ask_buy_sell_options()
-      //   })
-      // }
-      // else {
-      //   console.log(chalk.magenta("SORRY THE PAIR ") + chalk.green(pair) + chalk.magenta(" IS UNKNOWN BY BINANCE. Please try another one."))
-      //   ask_pair_budget()
-      // }
-    // })
+            console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
+            console.log(' ')
+          }
+        })
+      }).then(() => {
+        console.log(
+          chalk.magenta.bold('BTC ' + balance_in_btc.toString().padEnd(10) + ' | USDT $ ' + parseFloat(valueBTC * parseFloat(balance_in_btc)).toFixed(2)).padEnd(10) + ' '.padEnd(20) 
+          + chalk.magenta.bold(moment().format('h:mm:ss'))
+        )
+        ask_menu()
+      });
   })
 }
 
@@ -663,7 +656,8 @@ checkBuyOrderStatus = () => {
         info.balances.forEach(function (value, index) {
           var pairSearched = value.asset + base_currency
           if (pairSearched == pair) {
-            buy_amount = parseFloat(value.free)
+            console.log(chalk.white(" QTD BOUGHT #FREE ") + chalk.gray.bold(value.free) + chalk.white(" QTD BOUGHT #LOCKED ") + chalk.gray.bold(value.locked))
+            // buy_amount = parseFloat(value.free)
           }
         })
         // buy_amount = parseFloat(order.executedQty)
@@ -862,8 +856,7 @@ var options_menu = [
         console.log('not implement')
       }
     }
-  },
-  new inquirer.Separator()
+  }
 ]
 
 var menu_request = [
