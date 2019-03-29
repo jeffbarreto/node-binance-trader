@@ -245,11 +245,12 @@ see_balance = () => {
     valueBTC = parseFloat(ticker.BTCUSDT)
     my_coins.forEach(function (coin) {
       // console.log(keyCrypto.indexOf(coin.asset + 'BTC'))
-      var index = keyCrypto.indexOf(coin.asset == 'BTC' ? 'BTC' : coin.asset + 'BTC')
+      var index = keyCrypto.indexOf(coin.asset == 'BTC' ? 'BTCUSDT' : coin.asset + 'BTC')
       if (index > 0 ) {
         var value = new BigNumber(valueCrypto[index])
         var coinValue = (new BigNumber(coin.locked).plus(parseFloat(coin.free)))
         balance_in_btc += coin.asset == 'BTC' ? parseFloat(coinValue.toFormat(8)) : parseFloat(value.times(coinValue).toFormat(8))
+        console.log(balance_in_btc)
       }
 
       console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
