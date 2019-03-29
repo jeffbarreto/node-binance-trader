@@ -249,7 +249,7 @@ see_balance = () => {
       if (index > 0 ) {
         var value = new BigNumber(valueCrypto[index])
         var coinValue = (new BigNumber(coin.locked).plus(parseFloat(coin.free)))
-        balance_in_btc += parseFloat(value.times(coinValue).toFormat(8))
+        balance_in_btc += coin.asset == 'BTC' ? parseFloat(coinValue.toFormat(8)) : parseFloat(value.times(coinValue).toFormat(8))
       }
 
       console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
