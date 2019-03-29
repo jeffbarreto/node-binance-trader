@@ -59,6 +59,7 @@ let selling_method = ""
 let init_buy_filled = false
 
 var my_coins = []
+var my_orders = []
 var is_email_enable = false
 
 // subject
@@ -189,12 +190,48 @@ create_order = () => {
   console.log('Not implemented yet')
 }
 
-see_order = () => {
-   var coins = my_coins.map(async function (coin) {
-    await client.openOrders({
-      symbol: coin
-    }).then( (results) => {
-      console.log(results)
+var see_orders_request = [
+  {
+    type: 'input',
+    name: 'base_currency',
+    message: chalk.cyan('What base currency you chose for made your trade? (USDT, BTC, BNB or ETH)'),
+    default: base_currency,
+    validate: function(value) {
+      var valid = ((value.toUpperCase()==='BTC')||(value.toUpperCase()==='USDT')||(value.toUpperCase()==='ETH')||(value.toUpperCase()==='BNB'))
+      return valid || 'Currency not valid, please chose between USDT, BTC, BNB, ETH'
+    },
+  }
+]
+
+see_orders = () => {
+  inquirer.prompt(see_orders_request).then(answers => {
+    my_orders = my_coins.map(async function (coin) {
+      var pairTmp = coin.asset == 'BTC' ? 'BTCUSDT' :(coin.asset + answers.base_currency).toUpperCase()
+      return await client.openOrders({
+        symbol: pairTmp
+      })
+    })
+
+    var isEmpty = true
+
+    console.log(' ')
+    console.log(
+      chalk.magenta.bold('Order id'.padEnd(15) + ' '.padEnd(5) + 'Pair'.padEnd(15) + ' '.padEnd(5) + 'Type'.padEnd(15) + ' '.padEnd(5) + 'Price'.padEnd(15)) + ' '.padEnd(5)
+      + chalk.magenta.bold(moment().format('h:mm:ss'))
+    )
+    my_orders.forEach((order) => {
+      order.then((results) => {
+        if(results[0]) {
+          isEmpty = false
+          console.log(' ')
+          console.log(
+            chalk.grey((results[0].orderId).toString().padEnd(15) + ' '.padStart(5) + (results[0].symbol).toString().padEnd(15) + ' '.padStart(5) 
+            + (results[0].type).toString().padEnd(15) + ' '.padStart(5) + (results[0].price).toString().padEnd(15) + ' '.padStart(5))
+            + chalk.grey(moment().format('h:mm:ss'))
+          )
+          console.log(' ')
+        }
+      })
     })
   })
 }
@@ -867,8 +904,8 @@ var options_menu = [
   {
     name: 'See your orders',
     value: {
-      name: 'see_order',
-      method: see_order
+      name: 'see_orders',
+      method: see_orders
     }
   },
   {
