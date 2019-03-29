@@ -163,25 +163,39 @@ ask_pair_budget = () => {
       // CHECK IF PAIR IS UNKNOWN:
       if (_.filter(results.symbols, {symbol: pair}).length > 0) {
         setTitle('🐬 ' + pair + ' 🐬 ')
+        tickSize = _.filter(results.symbols, {symbol: pair})[0].filters[0].tickSize.indexOf("1") - 1
+        stepSize = _.filter(results.symbols, {symbol: pair})[0].filters[2].stepSize
+        // GET ORDER BOOK
         client.book({ symbol: pair }).then(results => {
+          // SO WE CAN TRY TO BUY AT THE 1ST BID PRICE + %0.02:
+          bid_price = parseFloat(results.bids[0].price)
+          ask_price = parseFloat(results.asks[0].price)
           console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
             + chalk.yellow(pair.padStart(10))
-            + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price )
-          )
-          ask_menu()
+            + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
+          fixed_buy_price_input[0].default = results.bids[0].price
+          ask_buy_sell_options()
         })
       }
       else {
         console.log(chalk.magenta("SORRY THE PAIR ") + chalk.green(pair) + chalk.magenta(" IS UNKNOWN BY BINANCE. Please try another one."))
-        ask_menu()
+        ask_pair_budget()
       }
     })
   })
 }
 
+create_order = () => {
+  console.log('Not implemented yet')
+}
+
 see_order = () => {
-  client.allOrders().then(orders => {
-    console.log(orders)
+   var coins = my_coins.map(async function (coin) {
+    await client.openOrders({
+      symbol: coin
+    }).then( (results) => {
+      console.log(results)
+    })
   })
 }
 
@@ -219,12 +233,11 @@ see_info_coin = () => {
     client.book({ symbol: pair }).then(results => {
       // SO WE CAN TRY TO BUY AT THE 1ST BID PRICE + %0.02:
       bid_price = parseFloat(results.bids[0].price)
-      ask_price = parseFloat(results.asks[0].price)
       console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
         + chalk.yellow(pair.padStart(10))
-        + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
-      fixed_buy_price_input[0].default = restapipubults.bids[0].price
-      ask_buy_sell_options()
+        + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price )
+      )
+      ask_menu()
     })
   })
 }
@@ -250,7 +263,6 @@ see_balance = () => {
         var value = new BigNumber(valueCrypto[index])
         var coinValue = (new BigNumber(coin.locked).plus(parseFloat(coin.free)))
         balance_in_btc += coin.asset == 'BTC' ? parseFloat(coinValue.toFormat(8)) : parseFloat(value.times(coinValue).toFormat(8))
-        console.log(balance_in_btc)
       }
 
       console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
@@ -857,6 +869,13 @@ var options_menu = [
     value: {
       name: 'see_order',
       method: see_order
+    }
+  },
+  {
+    name: 'Create order (Buy or Sell)',
+    value: {
+      name: 'create_order',
+      method: create_order
     }
   },
   {
