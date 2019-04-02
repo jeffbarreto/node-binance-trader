@@ -186,9 +186,14 @@ ask_pair_budget = () => {
   })
 }
 
-create_order = () => {
-  console.log('Not implemented yet')
-}
+var order_choice_options = [
+  {
+    type: 'list',
+    name: 'choice',
+    message: chalk.cyan('Would you like to trade order ?'),
+    choices: ['Yes', 'No'],
+  },
+]
 
 var see_orders_request = [
   {
@@ -199,7 +204,7 @@ var see_orders_request = [
     validate: function(value) {
       var valid = ((value.toUpperCase()==='BTC')||(value.toUpperCase()==='USDT')||(value.toUpperCase()==='ETH')||(value.toUpperCase()==='BNB'))
       return valid || 'Currency not valid, please chose between USDT, BTC, BNB, ETH'
-    },
+    }
   }
 ]
 
@@ -219,9 +224,11 @@ see_orders = () => {
       chalk.magenta.bold('Order id'.padEnd(15) + ' '.padEnd(5) + 'Pair'.padEnd(15) + ' '.padEnd(5) + 'Type'.padEnd(15) + ' '.padEnd(5) + 'Price'.padEnd(15)) + ' '.padEnd(5)
       + chalk.magenta.bold(moment().format('h:mm:ss'))
     )
-    my_orders.forEach((order) => {
+    var orders_tmp = []
+    my_orders.forEach((order, i) => {
       order.then((results) => {
         if(results[0]) {
+          orders_tmp.push(results[0])
           isEmpty = false
           console.log(' ')
           console.log(
@@ -230,6 +237,83 @@ see_orders = () => {
             + chalk.grey(moment().format('h:mm:ss'))
           )
           console.log(' ')
+        }
+
+        /*
+        if ((i == (my_orders.length - 1)) && isEmpty && pair != '') {
+           console.log(chalk.magenta.bold('Cancel ORDER currency ' + pair))
+           client.cancelOrder({
+             symbol: pair,
+             recvWindow: 1000000
+           })
+        }
+        */
+        if(i == (my_orders.length - 1)) {
+          setTimeout(() => {
+            inquirer.prompt(order_choice_options).then(answers => {
+              if (answers.choice == 'Yes') {
+                var ask_order = [
+                  {
+                    type: 'input',
+                    name: 'order_choice',
+                    message: chalk.cyan('What order would you like to trade?')
+                  }
+                ]
+
+                inquirer.prompt(ask_order).then(answers => {
+                    // CHECK IF PAIR IS UNKNOWN:
+                    // console.log(answers.order_choice)
+                    // var coin_tmp = null
+                    var coin_tmp = null
+                    orders_tmp.forEach((order, i) => {
+                      if(order && (order.orderId == answers.order_choice))
+                          coin_tmp = order
+                    })
+
+                    if (coin_tmp) {
+                        client.exchangeInfo().then(results => {
+                         pair = coin_tmp.symbol
+                         currency_to_buy = (pair).toUpperCase()
+                         budget = parseFloat(coin_tmp.origQty * bid_price)
+                         buy_amount = coin_tmp.origQty
+                         if (_.filter(results.symbols, {symbol: pair}).length > -5) {  
+                            client.cancelOrder({
+                              symbol: pair,
+                              orderId: coin_tmp.orderId,
+                              recvWindow: 1000000,
+                            })
+
+                            setTitle('🐬 ' + pair + ' 🐬 ')
+                            tickSize = _.filter(results.symbols, {symbol: pair})[0].filters[0].tickSize.indexOf("1") - 1
+                            stepSize = _.filter(results.symbols, {symbol: pair})[0].filters[2].stepSize
+                            // GET ORDER BOOK
+                            client.book({ symbol: pair }).then(results => {
+                              // SO WE CAN TRY TO BUY AT THE 1ST BID PRICE + %0.02:
+                              bid_price = parseFloat(results.bids[0].price)
+                              ask_price = parseFloat(results.asks[0].price)
+
+                              console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
+                                + chalk.yellow(pair.padStart(10))
+                                + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
+                              fixed_buy_price_input[0].default = results.bids[0].price
+
+                              ask_sell_options()
+                            })
+                          } else {
+                            console.log(chalk.magenta("SORRY THE PAIR ") + chalk.green(pair) + chalk.magenta(" IS UNKNOWN BY BINANCE. Please try another one (2)."))
+                            see_orders()
+                          }
+                        })
+                    } else {
+                      console.log(chalk.magenta("SORRY THE PAIR ") + chalk.green(pair) + chalk.magenta(" IS UNKNOWN BY BINANCE. Please try another one (1)."))
+                      see_orders()
+                    }
+                  })
+              } else {
+                ask_menu()
+              }
+            })
+          },800)
         }
       })
     })
@@ -299,7 +383,8 @@ see_balance = () => {
       if (index > 0 ) {
         var value = new BigNumber(valueCrypto[index])
         var coinValue = (new BigNumber(coin.locked).plus(parseFloat(coin.free)))
-        balance_in_btc += coin.asset == 'BTC' ? parseFloat(coinValue.toFormat(8)) : parseFloat(value.times(coinValue).toFormat(8))
+        var buget_coin = coin.asset == 'BTC' ? parseFloat(coinValue.toFormat(8)) : parseFloat(value.times(coinValue).toFormat(8))
+        balance_in_btc += buget_coin
       }
 
       console.log(chalk.cyan(coin.asset.padEnd(10) + ' '.padEnd(10) + coin.free.padEnd(10) + ' '.padEnd(10) + coin.locked.padEnd(10)))
@@ -314,19 +399,36 @@ see_balance = () => {
   });
 }
 
+var sell_options = {
+  type: 'list',
+  name: 'sell_option',
+  message: chalk.cyan('How would you like to sell:'),
+  choices: ['Set a Trailing Stop Loss', 'Set Stop Loss and Profit Percentages'],
+}
+
+ask_sell_options = () => {
+  inquirer.prompt(sell_options).then(answers => {
+    if (answers.sell_option.includes("Trailing")) {
+      selling_method = "Trailing"
+      ask_trailing_percent(start_trading_without_buy, see_orders)
+    }
+    else {
+      selling_method = "Profit"
+      ask_loss_profit_percents(start_trading_without_buy, see_orders)
+    }
+  })
+}
+
+var buy_options = {
+  type: 'list',
+  name: 'buy_option',
+  message: chalk.cyan('How would you like to buy:'),
+  choices: ['Buy at Market Price', 'Set a Buy Order just above Bid Price', 'Set a Buy Order at a Fixed Buy Price'],
+}
+
 var buy_sell_options = [
-  {
-    type: 'list',
-    name: 'buy_option',
-    message: chalk.cyan('How would you like to buy:'),
-    choices: ['Buy at Market Price', 'Set a Buy Order just above Bid Price', 'Set a Buy Order at a Fixed Buy Price'],
-  },
-  {
-    type: 'list',
-    name: 'sell_option',
-    message: chalk.cyan('How would you like to sell:'),
-    choices: ['Set a Trailing Stop Loss', 'Set Stop Loss and Profit Percentages'],
-  },
+  buy_options,
+  sell_options
 ]
 
 ask_buy_sell_options = () => {
@@ -336,11 +438,11 @@ ask_buy_sell_options = () => {
       buying_method = "Market"
       if (answers.sell_option.includes("Trailing")) {
         selling_method = "Trailing"
-        ask_trailing_percent()
+        ask_trailing_percent(start_trading, ask_pair_budget)
       }
       else {
         selling_method = "Profit"
-        ask_loss_profit_percents()
+        ask_loss_profit_percents(start_trading, ask_pair_budget)
       }
     }
     if (answers.buy_option.includes("Bid")) {
@@ -348,11 +450,11 @@ ask_buy_sell_options = () => {
       buying_method = "Bid"
       if (answers.sell_option.includes("Trailing")) {
         selling_method = "Trailing"
-        ask_trailing_percent()
+        ask_trailing_percent(start_trading, ask_pair_budget)
       }
       else {
         selling_method = "Profit"
-        ask_loss_profit_percents()
+        ask_loss_profit_percents(start_trading, ask_pair_budget)
       }
     }
     if (answers.buy_option.includes("Fixed")) {
@@ -386,11 +488,11 @@ ask_fixed_buy_price = (sell_option) => {
     console.log(chalk.grey("The bot will set a buy order at " + fixed_buy_price))
     if (sell_option.includes("Trailing")) {
       selling_method = "Trailing"
-      ask_trailing_percent()
+      ask_trailing_percent(start_trading, ask_pair_budget)
     }
     else {
       selling_method = "Profit"
-      ask_loss_profit_percents()
+      ask_loss_profit_percents(start_trading, ask_pair_budget)
     }
   })
 }
@@ -426,7 +528,7 @@ var loss_profit_inputs = [
   },
 ]
 
-ask_loss_profit_percents = () => {
+ask_loss_profit_percents = (yesCallback, noCallback) => {
   console.log(" ")
   inquirer.prompt(loss_profit_inputs).then(answers => {
     if (answers.confirm) {
@@ -436,10 +538,10 @@ ask_loss_profit_percents = () => {
       loss_pourcent = parseFloat(answers.loss_pourcent)
       loss_profit_inputs[0].default = loss_pourcent
       loss_profit_inputs[1].default = profit_pourcent
-      start_trading()
+      yesCallback()
     }
     else {
-      ask_pair_budget()
+      noCallback()
     }
   })
 }
@@ -465,21 +567,133 @@ var trailing_loss_input = [
   },
 ]
 
-ask_trailing_percent = () => {
-  console.log(" ")
+ask_trailing_percent = (yesCallback, noCallback) => {
   inquirer.prompt(trailing_loss_input).then(answers => {
     if (answers.confirm) {
       conf.set('nbt.trailing_pourcent', answers.trailing_pourcent)
       trailing_pourcent = parseFloat(answers.trailing_pourcent)
       trailing_loss_input[0].default = trailing_pourcent
-      start_trading()
+      yesCallback()
     }
     else {
-      ask_pair_budget()
+      noCallback()
     }
   })
 }
 
+var create_order_options = [
+  ...buy_info_request,
+  {
+    type: 'list',
+    name: 'choice_order',
+    message: chalk.cyan('What kind of order would like to do?'),
+    choices: [
+      'SELL',
+      'BUY'
+    ]
+  },
+]
+
+create_order = () => {
+  inquirer.prompt(create_order_options).then(answers => {
+    var choice_order_answers = answers.choice_order
+    pair = (answers.currency_to_buy + answers.base_currency).toUpperCase()
+    conf.set('nbt.base_currency', (answers.base_currency).toUpperCase())
+    conf.set('nbt.budget', answers.budget)
+    conf.set('nbt.currency_to_buy', (answers.currency_to_buy).toUpperCase())
+    base_currency = (answers.base_currency).toUpperCase()
+    currency_to_buy = (answers.currency_to_buy).toUpperCase()
+    budget = parseFloat(answers.budget)
+    buy_info_request[0].default  = base_currency
+    buy_info_request[1].default  = budget
+    buy_info_request[2].default  = currency_to_buy
+
+    client.exchangeInfo().then(results => {
+      // CHECK IF PAIR IS UNKNOWN:
+      if (_.filter(results.symbols, {symbol: pair}).length > 0) {
+        setTitle('🐬 ' + pair + ' 🐬 ')
+        tickSize = _.filter(results.symbols, {symbol: pair})[0].filters[0].tickSize.indexOf("1") - 1
+        stepSize = _.filter(results.symbols, {symbol: pair})[0].filters[2].stepSize
+        var precision = stepSize.toString().split('.')[1].length || 0
+
+        client.book({ symbol: pair }).then(results => {
+          bid_price = parseFloat(results.bids[0].price)
+          console.log( chalk.grey(moment().format('h:mm:ss').padStart(8))
+              + chalk.yellow(pair.padStart(10))
+              + chalk.grey(" CURRENT 1ST BID PRICE: " + bid_price ))
+          fixed_buy_price_input[0].default = bid_price
+          inquirer.prompt(fixed_buy_price_input).then(answers => {
+            // GET ORDER BOOK
+            fixed_operation_price = parseFloat(answers.fixed_buy_price)
+
+            if (choice_order_answers == 'SELL') {
+              operation_amount = budget   
+            } else {
+              operation_amount = (( ((budget / fixed_operation_price) / parseFloat(stepSize)) | 0 ) * parseFloat(stepSize)).toFixed(precision)
+            }
+
+            operation_price = parseFloat(fixed_operation_price)
+
+            client.order({
+              symbol: pair,
+              side: choice_order_answers,
+              type: 'LIMIT',
+              price: operation_price,
+              quantity: operation_amount,
+              recvWindow: 1000000,
+            })
+            .then( order => {
+              reset_trade()
+              report.succeed( chalk.magenta(" SUCCESS IN CREATE ORDER ") )
+              setTimeout( () => { ask_menu(), 2500 } )
+            })
+            .catch( error => {
+              report.fail( " ERROR #7771 " + operation_amount + " :: " + error )
+              reset_trade()
+              ask_menu()
+            })
+          })
+         })
+      }
+      else {
+        console.log(chalk.magenta("SORRY THE PAIR ") + chalk.green(pair) + chalk.magenta(" IS UNKNOWN BY BINANCE. Please try another one."))
+        ask_pair_budget()
+      }
+    })
+  })
+}
+
+start_trading_without_buy = () => {
+  step = 99
+  init_buy_filled = true
+  client.book({ symbol: pair }).then(results => {
+    buy_price = parseFloat(results.bids[0].price)
+    console.log(chalk.gray(" START WITH PRICE @ ") + chalk.cyan(buy_price))
+    if (selling_method==="Trailing") {
+      stop_price = (buy_price - (buy_price * trailing_pourcent / 100.00)).toFixed(tickSize)
+      loss_price = (stop_price - (stop_price * 0.001)).toFixed(tickSize)
+      set_stop_loss_order().then(() => {
+        auto_trade()
+      }).catch(() => {
+        reset_trade()
+        ask_menu()
+      })
+      switch_price = (buy_price + (buy_price * trailing_pourcent / 100.00)).toFixed(tickSize)
+    }
+    else {
+      stop_price = (buy_price - (buy_price * loss_pourcent / 100.00)).toFixed(tickSize)
+      loss_price = (stop_price - (stop_price * 0.001)).toFixed(tickSize)
+      set_stop_loss_order().then(() => {
+        auto_trade()
+      }).catch(() => {
+        reset_trade()
+        ask_menu()
+      })
+      switch_price = (buy_price + (buy_price * profit_pourcent / 200.00)).toFixed(tickSize)
+      sell_price = (buy_price + (buy_price * profit_pourcent / 100.00)).toFixed(tickSize)
+    }
+  })
+}
 
 start_trading = () => {
   var precision = stepSize.toString().split('.')[1].length || 0
@@ -552,6 +766,7 @@ auto_trade = () => {
   step = 1
   report.text = ""
   report.start()
+
   // LISTEN TO KEYBOARD PRSEED KEYS
   process.stdin.resume()
   process.stdin.setRawMode(true)
@@ -779,7 +994,7 @@ checkBuyOrderStatus = () => {
 }
 
 set_stop_loss_order = () => {
-  client.order({
+  return client.order({
     symbol: pair,
     side: 'SELL',
     type: 'STOP_LOSS_LIMIT',
