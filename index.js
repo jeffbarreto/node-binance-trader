@@ -709,6 +709,7 @@ start_trading = () => {
       recvWindow: 1000000,
     })
     .then( (order_result) => {
+      step = 1
       order_id = order_result.orderId
       auto_trade()
     })
@@ -730,6 +731,7 @@ start_trading = () => {
       recvWindow: 1000000,
     })
     .then( (order_result) => {
+      step = 1
       order_id = order_result.orderId
       auto_trade()
     })
@@ -751,6 +753,7 @@ start_trading = () => {
       recvWindow: 1000000,
     })
     .then( (order_result) => {
+      step = 1
       order_id = order_result.orderId
       auto_trade()
     })
@@ -763,7 +766,6 @@ start_trading = () => {
 }
 
 auto_trade = () => {
-  step = 1
   report.text = ""
   report.start()
 
